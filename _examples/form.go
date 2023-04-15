@@ -4,9 +4,9 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/Chise1/dynamic-struct"
 	"github.com/go-playground/form"
 	"github.com/leebenson/conform"
-	"github.com/ompluscator/dynamic-struct"
 )
 
 func getReaderWithNewStructForFormExample() interface{} {
@@ -83,8 +83,8 @@ func getReaderWithExtendedStructForFormExample() interface{} {
 	boolean := false
 
 	instance := dynamicstruct.ExtendStruct(struct {
-		Integer   int `form:"int" validate:"lt=123"`
-		Uinteger  uint `validate:"gte=0"`
+		Integer   int     `form:"int" validate:"lt=123"`
+		Uinteger  uint    `validate:"gte=0"`
 		Text      string  `form:"someText" conform:"trim"`
 		Float     float64 `form:"double"`
 		Boolean   bool
@@ -141,8 +141,8 @@ func getReaderWithExtendedStructForFormExample() interface{} {
 
 func getReaderWithMergedStructsForFormExample() interface{} {
 	instance := dynamicstruct.MergeStructs(struct {
-		Integer  int `form:"int" validate:"lt=123"`
-		Uinteger uint `validate:"gte=0"`
+		Integer  int     `form:"int" validate:"lt=123"`
+		Uinteger uint    `validate:"gte=0"`
 		Text     string  `form:"someText" conform:"trim"`
 		Float    float64 `form:"double"`
 		Boolean  bool

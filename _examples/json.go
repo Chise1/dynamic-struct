@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/ompluscator/dynamic-struct"
+	"github.com/Chise1/dynamic-struct"
 )
 
 func getReaderWithNewStructForJsonExample() interface{} {
