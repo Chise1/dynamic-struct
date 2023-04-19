@@ -28,6 +28,21 @@ Works out-of-the-box with:
 * https://github.com/leebenson/conform
 * https://golang.org/pkg/encoding/json/
 * ...
+## Tips
+
+**sub instance can not be dynamic-struct pointer**
+like this:
+```go
+subInstance := NewStruct().AddField("Integer", 0, `json:"int"`).
+		AddField("Text", "", `json:"someText"`).Build().New()
+	fmt.Println(reflect.ValueOf(&subInstance).Elem().Elem().Elem().Kind())
+	instance := NewStruct().
+		AddField("StructPtr", &subInstance, `json:"struct"`). // error can use subInstance,but can not use &subInstance
+		Build().
+		New()
+```
+
+
 
 ## Benchmarks
 

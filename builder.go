@@ -63,12 +63,13 @@ type (
 	// This definition can't be changed anymore, once is built.
 	// It provides a method for creating new instances of same defintion.
 	DynamicStruct interface {
-		// New provides new instance of defined dynamic struct.
+		// New provides new pointer of defined dynamic struct.
 		//
 		// value := dStruct.New()
 		//
 		New() interface{}
-
+		// New provides new instance of defined dynamic struct
+		Zero() interface{}
 		// NewSliceOfStructs provides new slice of defined dynamic struct, with 0 length and capacity.
 		//
 		// value := dStruct.NewSliceOfStructs()
@@ -103,7 +104,6 @@ type (
 // for defining fresh dynamic struct.
 //
 // builder := dynamicstruct.NewStruct()
-//
 func NewStruct() Builder {
 	return &builderImpl{
 		fields: []*fieldConfigImpl{},
@@ -114,7 +114,6 @@ func NewStruct() Builder {
 // returns new instance of Builder interface.
 //
 // builder := dynamicstruct.MergeStructs(MyStruct{})
-//
 func ExtendStruct(value interface{}) Builder {
 	return MergeStructs(value)
 }
@@ -123,7 +122,6 @@ func ExtendStruct(value interface{}) Builder {
 // returns new instance of Builder interface.
 //
 // builder := dynamicstruct.MergeStructs(MyStructOne{}, MyStructTwo{}, MyStructThree{})
-//
 func MergeStructs(values ...interface{}) Builder {
 	builder := NewStruct()
 
@@ -212,8 +210,14 @@ func (f *fieldConfigImpl) SetTag(tag string) FieldConfig {
 	return f
 }
 
+// return dynamic-struct zero pointer
 func (ds *dynamicStructImpl) New() interface{} {
 	return reflect.New(ds.definition).Interface()
+}
+
+// return dynamic-struct zero data
+func (ds *dynamicStructImpl) Zero() interface{} {
+	return reflect.Zero(ds.definition).Interface()
 }
 
 func (ds *dynamicStructImpl) NewSliceOfStructs() interface{} {
