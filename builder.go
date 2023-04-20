@@ -75,7 +75,7 @@ type (
 		// value := dStruct.NewSliceOfStructs()
 		//
 		NewSliceOfStructs() interface{}
-
+		ZeroSliceOfStructs() interface{}
 		// New provides new map of defined dynamic struct with desired key type.
 		//
 		// value := dStruct.NewMapOfStructs("")
@@ -223,7 +223,9 @@ func (ds *dynamicStructImpl) Zero() interface{} {
 func (ds *dynamicStructImpl) NewSliceOfStructs() interface{} {
 	return reflect.New(reflect.SliceOf(ds.definition)).Interface()
 }
-
+func (ds *dynamicStructImpl) ZeroSliceOfStructs() interface{} {
+	return reflect.Zero(reflect.SliceOf(ds.definition)).Interface()
+}
 func (ds *dynamicStructImpl) NewMapOfStructs(key interface{}) interface{} {
 	return reflect.New(reflect.MapOf(reflect.Indirect(reflect.ValueOf(key)).Type(), ds.definition)).Interface()
 }
