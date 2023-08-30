@@ -3,7 +3,7 @@ package dynamicstruct
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"github.com/stretchr/testify/assert"
 	"reflect"
 	"testing"
 )
@@ -84,30 +84,24 @@ func TestNewWriter(t *testing.T) {
 `)
 	instance := Instance.Build().New()
 	err := json.Unmarshal(data, &instance)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Equal(t, nil, err)
 
 	data, err = json.Marshal(instance)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Equal(t, nil, err)
+
 	if string(data) != `{"int":123,"someText":"example","double":123.45,"Boolean":true,"Slice":[1,2,3],"struct":{"int":456,"someText":"example2"}}` {
 		fmt.Println(string(data))
 		t.Fatal("not equal")
 	}
 	writer, err := NewWriter(instance)
-	if err != nil {
-		log.Fatal(err)
-	}
+	assert.Equal(t, nil, err)
+
 	err = writer.LinkSet("Struct.Integer", 100)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Equal(t, nil, err)
+
 	data, err = json.Marshal(instance)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Equal(t, nil, err)
+
 	if string(data) != `{"int":123,"someText":"example","double":123.45,"Boolean":true,"Slice":[1,2,3],"struct":{"int":100,"someText":"example2"}}` {
 		fmt.Println(string(data))
 		t.Fatal("not equal")
@@ -116,13 +110,11 @@ func TestNewWriter(t *testing.T) {
 		Integer int
 		Text    string
 	}{101, "lb"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Equal(t, nil, err)
+
 	marshal, err := json.Marshal(instance)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Equal(t, nil, err)
+
 	if string(marshal) != `{"int":123,"someText":"example","double":123.45,"Boolean":true,"Slice":[1,2,3],"struct":{"int":101,"someText":"lb"}}` {
 		t.Fatal("not equal")
 	}
@@ -153,36 +145,26 @@ func TestNewWriteSubStruct(t *testing.T) {
 `)
 	instance := Instance2.Build().New()
 	err := json.Unmarshal(data, instance)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	assert.Equal(t, nil, err)
 	data, err = json.Marshal(instance)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != `{"int":123,"someText":"example","double":123.45,"Boolean":true,"Slice":[1,2,3],"subStruct":{"boolean":true}}` {
-		fmt.Println(string(data))
-		t.Fatal("not equal")
-	}
+	assert.Equal(t, nil, err)
+	assert.Equal(t, `{"int":123,"someText":"example","double":123.45,"Boolean":true,"Slice":[1,2,3],"subStruct":{"boolean":true}}`, string(data))
 	writer, err := NewWriter(instance)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Equal(t, nil, err)
+
 	err = writer.Set("SubStruct", subStruct{
 		Boolean: false,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Equal(t, nil, err)
+
 	err = writer.Set("SubStruct", subStruct2{
 		Index: "10",
 	})
-	if err == nil {
-		t.Fatal("panic")
-	}
+	assert.NotEqual(t, nil, err)
 
 	dd, _ := writer.Get("SubStruct")
+	marshal, _ := json.Marshal(instance)
+	fmt.Println(string(marshal))
 	if fmt.Sprintf("%v", dd) != "{false}" {
 		t.Fatal("not equal")
 	}
@@ -257,28 +239,23 @@ func TestSubSlice(t *testing.T) {
 	}
 }
 func TestSubSliceFinal(t *testing.T) {
-
 	var subSt1 = NewStruct().AddField("Index", 0, `json:"index"`).Build()
-
 	sub1 := subSt1.New()
 	wt, err := NewWriter(sub1)
-	if err != nil {
-		t.Log(err)
-	}
+	assert.Equal(t, nil, err)
 	err = wt.Set("Index", 11)
-	if err != nil {
-		t.Log(err)
-	}
-	fmt.Println(sub1)
-	subList := subSt1.NewSliceOfStructs()
+	assert.Equal(t, nil, err)
+
+	subList := subSt1.ZeroSliceOfStructs()
 	sub1Val := reflect.ValueOf(subList)
-	sub1Val = reflect.Append(sub1Val, reflect.ValueOf(sub1))
+	val := reflect.Indirect(reflect.ValueOf(sub1))
+	sub1Val = reflect.Append(sub1Val, val)
 	fmt.Println(sub1Val)
 	subList = sub1Val.Interface()
 	var subSt2 = NewStruct().AddField("Index", "", `json:"index"`).
 		AddField("SubStruct", subList, `json:"sub" dynamic:"key:Index"`).Build()
-	sub2 := subSt2.New()
-	writer, err := NewWriter(sub2)
+	sub2 := subSt2.Zero()
+	writer, err := NewWriter(&sub2)
 	if err != nil {
 		t.Log(err)
 	}
@@ -291,8 +268,6 @@ func TestSubSliceFinal(t *testing.T) {
 	sub2Val := reflect.ValueOf(subl2)
 	sub2Val = reflect.Append(sub2Val, reflect.ValueOf(sub2))
 	subl2 = sub2Val.Interface()
-	fmt.Println(subList)
-	fmt.Println(subl2)
 	var Instance3 = NewStruct().
 		AddField("Integer", 0, `json:"int"`).
 		AddField("Text", "", `json:"someText"`).
@@ -300,31 +275,22 @@ func TestSubSliceFinal(t *testing.T) {
 		AddField("Boolean", false, "").
 		AddField("Slice", []int{}, "").
 		AddField("Anonymous", "", `json:"-"`).
-		AddField("SubStruct1", subList, `json:"subStruct1" dynamic:"key:Index"`).
-		AddField("SubStruct2", subl2, `json:"subStruct2" dynamic:"key:Index"`).
+		//AddField("SubStruct1", subList, `json:"subStruct1" dynamic:"key:Index"`).
+		AddField("SubStruct2", sub2, `json:"subStruct2" dynamic:"key:Index"`).
 		Build()
 	instance := Instance3.New()
 	//marshal, _ := json.Marshal(instance)
-	data := `{"int":10,"someText":"text","double":2,"Boolean":true,"Slice":[1,2],"subStruct1":{"index":1},"subStruct2":{"index":"1","sub":{"index":2}}}`
-
-	json.Unmarshal([]byte(data), &instance)
+	data := `{"int":10,"someText":"text","double":2,"Boolean":true,"Slice":[1,2],"subStruct1":{"index":1},"subStruct2":{"index":"1","sub":[{"index":2}]}}`
+	err = json.Unmarshal([]byte(data), instance)
+	assert.Equal(t, nil, err)
 	fmt.Println(instance)
-
-	//marshal, _ = json.Marshal(instance)
-	//if string(marshal) != `{"Boolean":true,"Slice":[1,2],"double":2,"int":10,"someText":"text","subStruct1":{"index":1},"subStruct2":{"index":"1","sub":{"index":2}}}` {
-	//	t.Log(string(marshal))
-	//	t.Fatal("not equeal")
-	//}
 	writer, err = NewWriter(&instance)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sl, found := writer.LinkGet("SubStruct2.SubStruct.1.SubStruct")
+	sl, found := writer.LinkGet("SubStruct2.SubStruct.2.Index")
 	if !found {
 		t.Fatal("not found")
 	}
 	fmt.Println(sl)
-
 }
-
-// panic: reflect.Set: value of type *interface {} is not assignable to type struct { Index string "json:\"index\""; SubStruct []struct { Index int "json:\"index\"" } "json:\"sub\" dynamic:\"key:Index\"" }

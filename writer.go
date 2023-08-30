@@ -7,7 +7,6 @@ import (
 	"log"
 	"reflect"
 	"strings"
-	"time"
 )
 
 // Writer is helper interface for writing to a struct.
@@ -36,8 +35,8 @@ type writeFieldImpl struct {
 	keys     map[string]Writer //如果数据slice有key， 则keys不为空 key为数据key的值，value为slice的值
 	keyField string
 	writer   Writer
-	seted    int64 // 写入数据的时候更新一次
-	geted    int64 // 更新keys数据的时候更新一次
+	//seted    int64 // 写入数据的时候更新一次  todo 先不考虑减少排序问题
+	//geted    int64 // 更新keys数据的时候更新一次
 }
 type writeImpl struct {
 	fields     map[string]writeFieldImpl
@@ -46,10 +45,13 @@ type writeImpl struct {
 }
 
 func (s *writeFieldImpl) updateKeys() {
-	if len(s.keyField) == 0 || s.seted == s.geted {
+	//if len(s.keyField) == 0 || s.seted == s.geted {
+	//	return
+	//}
+	//s.geted = s.seted
+	if len(s.keyField) == 0 {
 		return
 	}
-	s.geted = s.seted
 	// 如果数据是slice类型，进行替换的时候，更新keys
 	keys := make(map[string]Writer, s.value.Len())
 	for i := 0; i < s.value.Len(); i++ {
@@ -58,7 +60,7 @@ func (s *writeFieldImpl) updateKeys() {
 	s.keys = keys
 }
 func (s *writeFieldImpl) updateStmp() {
-	s.seted = time.Now().Unix()
+	//s.seted = time.Now().Unix()
 }
 func (s *writeImpl) Set(name string, value any) (err error) {
 	defer func() {
@@ -75,12 +77,16 @@ func (s *writeImpl) Set(name string, value any) (err error) {
 	if valueType.Kind() != s.fieldsType[name] {
 		return fmt.Errorf("type mismatch :%s --- %s", valueType.Kind().String(), s.fieldsType[name].String())
 	}
+	if valueType.Name() != field.value.Type().Name() {
+		return errors.New("struct must be same")
+	}
 	if valueType.Kind() == reflect.Slice {
 		if valueType.Elem().Kind() != field.value.Type().Elem().Kind() {
 			return fmt.Errorf("type mismatch :%s --- %s", valueType.Elem().Kind().String(), field.value.Type().Elem().Kind())
 		}
 	}
 	fmt.Println(field.value.Type().Kind())
+	//field.value = reflect.ValueOf(value)
 	field.value.Set(reflect.ValueOf(value))
 	field.updateStmp()
 	return
@@ -386,7 +392,6 @@ func NewWriter(value any) (writer Writer, err error) {
 		if typeOf.Kind() == reflect.Struct {
 			break
 		}
-		fmt.Println(typeOf.Kind())
 		valueOf = valueOf.Elem()
 	}
 	ret, err := subWriter(value)
