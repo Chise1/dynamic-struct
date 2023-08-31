@@ -1,0 +1,3 @@
+package dynamicstruct
+
+var SqliteSeq = "."

@@ -157,7 +157,7 @@ func (s *writeImpl) SetStruct(name string, value any) error {
 
 // can set struct.substruct field value
 func (s *writeImpl) LinkSet(linkName string, value any) error {
-	names := strings.Split(linkName, ".")
+	names := strings.Split(linkName, SqliteSeq)
 	if len(names) == 1 {
 		return s.Set(linkName, value)
 	}
@@ -178,7 +178,7 @@ func (s *writeImpl) LinkSet(linkName string, value any) error {
 		if err != nil {
 			return err
 		}
-		return writer.LinkSet(strings.Join(names[2:], "."), value)
+		return writer.LinkSet(strings.Join(names[2:], SqliteSeq), value)
 	} else if field.isMap {
 		sub := reflect.Indirect(field.value).MapIndex(reflect.Indirect(reflect.ValueOf(names[1])))
 		var x reflect.Value
@@ -196,7 +196,7 @@ func (s *writeImpl) LinkSet(linkName string, value any) error {
 		if err != nil {
 			return err // todo 优化报错
 		}
-		ret := writer.LinkSet(strings.Join(names[2:], "."), value)
+		ret := writer.LinkSet(strings.Join(names[2:], SqliteSeq), value)
 		if ret == nil {
 			reflect.Indirect(field.value).SetMapIndex(reflect.ValueOf(names[1]), reflect.Indirect(x))
 		}
@@ -204,7 +204,7 @@ func (s *writeImpl) LinkSet(linkName string, value any) error {
 	}
 
 	if field.writer != nil {
-		nextName := strings.Join(names[1:], ".")
+		nextName := strings.Join(names[1:], SqliteSeq)
 		return field.writer.LinkSet(nextName, value)
 	}
 	return fmt.Errorf("field %s is not a struct", name)
@@ -212,7 +212,7 @@ func (s *writeImpl) LinkSet(linkName string, value any) error {
 
 // can set struct.substruct field value
 func (s *writeImpl) LinkGet(linkName string) (any, bool) {
-	names := strings.Split(linkName, ".")
+	names := strings.Split(linkName, SqliteSeq)
 	if len(names) == 1 {
 		return s.Get(linkName)
 	}
@@ -222,7 +222,7 @@ func (s *writeImpl) LinkGet(linkName string) (any, bool) {
 		return nil, false
 	}
 	if field.writer != nil {
-		nextName := strings.Join(names[1:], ".")
+		nextName := strings.Join(names[1:], SqliteSeq)
 		return field.writer.LinkGet(nextName)
 	}
 	if field.isSlice {
@@ -237,7 +237,7 @@ func (s *writeImpl) LinkGet(linkName string) (any, bool) {
 		if err != nil {
 			return nil, false
 		}
-		return writer.LinkGet(strings.Join(names[2:], "."))
+		return writer.LinkGet(strings.Join(names[2:], SqliteSeq))
 	} else if field.isMap {
 		sub := reflect.Indirect(field.value).MapIndex(reflect.Indirect(reflect.ValueOf(names[1])))
 		if sub.IsZero() {
@@ -247,7 +247,7 @@ func (s *writeImpl) LinkGet(linkName string) (any, bool) {
 		if err != nil {
 			return nil, false
 		}
-		return writer.LinkGet(strings.Join(names[2:], "."))
+		return writer.LinkGet(strings.Join(names[2:], SqliteSeq))
 	}
 	return nil, false
 }
@@ -308,7 +308,7 @@ func (s *writeImpl) Remove(name string, i, j int) error {
 }
 
 func (s *writeImpl) LinkAppend(linkName string, value ...any) error {
-	names := strings.Split(linkName, ".")
+	names := strings.Split(linkName, SqliteSeq)
 	if len(names) == 1 {
 		return s.Append(linkName, value...)
 	}
@@ -318,7 +318,7 @@ func (s *writeImpl) LinkAppend(linkName string, value ...any) error {
 		return errors.New("not found field " + name)
 	}
 	if field.writer != nil {
-		nextName := strings.Join(names[1:], ".")
+		nextName := strings.Join(names[1:], SqliteSeq)
 		return field.writer.LinkAppend(nextName, value...)
 	}
 	if field.isSlice {
@@ -333,14 +333,14 @@ func (s *writeImpl) LinkAppend(linkName string, value ...any) error {
 		if err != nil {
 			return err
 		}
-		return writer.LinkAppend(strings.Join(names[2:], "."), value...)
+		return writer.LinkAppend(strings.Join(names[2:], SqliteSeq), value...)
 	}
 	return fmt.Errorf("field %s is not a slice", name)
 }
 
 // remove between i to j by index to slice
 func (s *writeImpl) LinkRemove(linkName string, i, j int) error {
-	names := strings.Split(linkName, ".")
+	names := strings.Split(linkName, SqliteSeq)
 	if len(names) == 1 {
 		return s.Remove(linkName, i, j)
 	}
@@ -350,7 +350,7 @@ func (s *writeImpl) LinkRemove(linkName string, i, j int) error {
 		return errors.New("not found field " + name)
 	}
 	if field.writer != nil {
-		nextName := strings.Join(names[1:], ".")
+		nextName := strings.Join(names[1:], SqliteSeq)
 		return field.writer.LinkRemove(nextName, i, j)
 	}
 	if field.isSlice {
@@ -365,7 +365,7 @@ func (s *writeImpl) LinkRemove(linkName string, i, j int) error {
 		if err != nil {
 			return err
 		}
-		return writer.LinkRemove(strings.Join(names[2:], "."), i, j)
+		return writer.LinkRemove(strings.Join(names[2:], SqliteSeq), i, j)
 	}
 	return fmt.Errorf("field %s is not a slice", name)
 }
@@ -379,7 +379,7 @@ func getAllField(fatherName string, value reflect.Value, data map[string]any) {
 	typ := value.Type()
 	for i := 0; i < value.NumField(); i++ {
 		field := value.Field(i)
-		name := strings.Join([]string{fatherName, typ.Field(i).Name}, ".")
+		name := strings.Join([]string{fatherName, typ.Field(i).Name}, SqliteSeq)
 		if field.Kind() == reflect.Struct {
 			getAllField(name, field, data)
 			continue

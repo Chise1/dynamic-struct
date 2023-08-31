@@ -62,6 +62,59 @@ BenchmarkExtendStruct_NewInstance_Parallel-4        20000000     89.5 ns/op
 BenchmarkMergeStructs_NewInstance-4                 10000000      140 ns/op
 BenchmarkMergeStructs_NewInstance_Parallel-4        20000000     94.3 ns/op
 ```
+## Write data to dynamic struct
+
+Only can use it in dy-struct like this(struct field can not be pointer):
+```go
+type Common struct{
+	Slice []int // not pointer
+	Map   map[compare]struct{...} //
+	Field string
+	...
+}
+```
+use like this:
+```go
+var subInstance = NewStruct().AddField("Integer", 0, `json:"int"`).
+AddField("Text", "", `json:"someText"`).Build()
+
+var subSt1 = NewStruct().AddField("Index", 0, `json:"index"`).AddField(
+		"Map", subInstance.NewMapOfStructs(""), "").Build()
+	data := `{"index":10,"Map":{"text1":{"int":1,"someText":"text1"}}}`
+	instance := subSt1.New()
+	err := json.Unmarshal([]byte(data), instance)
+	assert.Equal(t, nil, err)
+	marshal, err := json.Marshal(instance)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, data, string(marshal))
+	writer, err := NewWriter(instance)
+	assert.Equal(t, nil, err)
+	err = writer.LinkSet("Map.text1.Integer", 2)
+	assert.Equal(t, nil, err)
+	err = writer.LinkSet("Map.text1.Integer", "2")
+	assert.NotEqual(t, nil, err)
+	bytes, err := json.Marshal(instance)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, `{"index":10,"Map":{"text1":{"int":2,"someText":"text1"}}}`, string(bytes))
+	ret, found := writer.LinkGet("Map.text1.Integer")
+	assert.Equal(t, true, found)
+	assert.Equal(t, 2, ret.(int))
+	err = writer.LinkSet("Map.text2", struct {
+		Integer int    `json:"int"`
+		Text    string `json:"someText"`
+	}{22, "text2"})
+	assert.Equal(t, nil, err)
+	bytes, err = json.Marshal(instance)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, `{"index":10,"Map":{"text1":{"int":2,"someText":"text1"},"text2":{"int":22,"someText":"text2"}}}`, string(bytes))
+	err = writer.Delete("Map", "text1")
+	assert.Equal(t, nil, err)
+	bytes, err = json.Marshal(instance)
+	assert.Equal(t, `{"index":10,"Map":{"text2":{"int":22,"someText":"text2"}}}`, string(bytes))
+```
+
+
+
 
 ## Add new struct
 ```go
