@@ -227,5 +227,5 @@ func (ds *dynamicStructImpl) ZeroSliceOfStructs() interface{} {
 	return reflect.Zero(reflect.SliceOf(ds.definition)).Interface()
 }
 func (ds *dynamicStructImpl) NewMapOfStructs(key interface{}) interface{} {
-	return reflect.New(reflect.MapOf(reflect.Indirect(reflect.ValueOf(key)).Type(), ds.definition)).Interface()
+	return reflect.New(reflect.MapOf(reflect.Indirect(reflect.ValueOf(key)).Type(), reflect.TypeOf(reflect.Zero(ds.definition).Interface()))).Interface()
 }

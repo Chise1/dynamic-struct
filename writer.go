@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -20,7 +20,9 @@ type Writer interface {
 	Remove(name string, i, j int) error
 	LinkAppend(name string, value ...any) error
 	LinkRemove(linkName string, i, j int) error
-
+	// map
+	Store(name string, key any, value any) error
+	Load(name string, key any) (any, error)
 	// get sub struct writer ptr
 	// link set sub struct field value
 	LinkSet(name string, value any) error
@@ -30,13 +32,12 @@ type Writer interface {
 	json.Marshaler
 }
 type writeFieldImpl struct {
-	field    reflect.StructField
-	value    reflect.Value
-	keys     map[string]Writer //如果数据slice有key， 则keys不为空 key为数据key的值，value为slice的值
-	keyField string
-	writer   Writer
-	//seted    int64 // 写入数据的时候更新一次  todo 先不考虑减少排序问题
-	//geted    int64 // 更新keys数据的时候更新一次
+	field   reflect.StructField
+	value   reflect.Value
+	isSlice bool // 是切片
+	isMap   bool
+	writer  Writer
+	key     reflect.Kind
 }
 type writeImpl struct {
 	fields     map[string]writeFieldImpl
@@ -49,18 +50,49 @@ func (s *writeFieldImpl) updateKeys() {
 	//	return
 	//}
 	//s.geted = s.seted
-	if len(s.keyField) == 0 {
-		return
-	}
-	// 如果数据是slice类型，进行替换的时候，更新keys
-	keys := make(map[string]Writer, s.value.Len())
-	for i := 0; i < s.value.Len(); i++ {
-		keys[fmt.Sprint(s.value.Index(i).FieldByName(s.keyField).Interface())], _ = subWriter(s.value.Index(i))
-	}
-	s.keys = keys
+	return
 }
 func (s *writeFieldImpl) updateStmp() {
 	//s.seted = time.Now().Unix()
+}
+
+func (s *writeImpl) Load(name string, key any) (value any, err error) {
+	defer func() {
+		er := recover()
+		if er != nil {
+			err = errors.New(er.(string))
+		}
+	}()
+	field, ok := s.fields[name]
+	if !ok {
+		return nil, errors.New("not found field " + name)
+	}
+	if s.fieldsType[name] == reflect.Pointer && field.value.Type().Elem().Kind() == reflect.Map {
+		if field.value.Type().Key().Kind() != reflect.TypeOf(key).Kind() {
+			return nil, fmt.Errorf("key type is error! need %s,but got %s", field.value.Type().Key().Kind().String(), reflect.TypeOf(key).Kind().String())
+		}
+		return field.value.MapIndex(reflect.ValueOf(key)), nil
+	}
+	return
+}
+func (s *writeImpl) Store(name string, key any, value any) (err error) {
+	defer func() {
+		er := recover()
+		if er != nil {
+			err = errors.New(er.(string))
+		}
+	}()
+	field, ok := s.fields[name]
+	if !ok {
+		return errors.New("not found field " + name)
+	}
+	if s.fieldsType[name] == reflect.Pointer && field.value.Type().Elem().Kind() == reflect.Map {
+		if field.value.Type().Key().Kind() != reflect.TypeOf(key).Kind() {
+			return fmt.Errorf("key type is error! need %s,but got %s", field.value.Type().Key().Kind().String(), reflect.TypeOf(key).Kind().String())
+		}
+		field.value.SetMapIndex(reflect.ValueOf(key), reflect.ValueOf(value))
+	}
+	return
 }
 func (s *writeImpl) Set(name string, value any) (err error) {
 	defer func() {
@@ -85,12 +117,11 @@ func (s *writeImpl) Set(name string, value any) (err error) {
 			return fmt.Errorf("type mismatch :%s --- %s", valueType.Elem().Kind().String(), field.value.Type().Elem().Kind())
 		}
 	}
-	fmt.Println(field.value.Type().Kind())
-	//field.value = reflect.ValueOf(value)
 	field.value.Set(reflect.ValueOf(value))
 	field.updateStmp()
 	return
 }
+
 func (s *writeImpl) Get(name string) (any, bool) {
 	field, ok := s.fields[name]
 	if !ok {
@@ -131,14 +162,39 @@ func (s *writeImpl) LinkSet(linkName string, value any) error {
 	if !ok {
 		return errors.New("not found field " + name)
 	}
-	if len(field.keyField) > 0 {
-		field.updateKeys()
-		for k, v := range field.keys {
-			if k == names[1] {
-				return v.LinkSet(strings.Join(names[2:], "."), value)
-			}
+	if field.isSlice {
+		atoi, err := strconv.Atoi(names[1])
+		if err != nil {
+			return err // todo 优化报错
 		}
+		if field.value.Len() <= atoi {
+			return errors.New(fmt.Sprintf("index out of range [%d] with length %d", atoi, field.value.Len()))
+		}
+		writer, err := subWriter(field.value.Index(atoi))
+		if err != nil {
+			return err
+		}
+		return writer.LinkSet(strings.Join(names[2:], "."), value)
+	} else if field.isMap {
+		sub := reflect.Indirect(field.value).MapIndex(reflect.Indirect(reflect.ValueOf(names[1])))
+		if sub.IsZero() {
+			return errors.New("can not found " + names[1])
+		}
+
+		x := reflect.New(sub.Type())
+		x.Elem().Set(sub)
+
+		writer, err := subWriter(x)
+		if err != nil {
+			return err // todo 优化报错
+		}
+		ret := writer.LinkSet(strings.Join(names[2:], "."), value)
+		if ret == nil {
+			reflect.Indirect(field.value).SetMapIndex(reflect.ValueOf(names[1]), reflect.Indirect(x))
+		}
+		return ret
 	}
+
 	if field.writer != nil {
 		nextName := strings.Join(names[1:], ".")
 		return field.writer.LinkSet(nextName, value)
@@ -163,13 +219,29 @@ func (s *writeImpl) LinkGet(linkName string) (any, bool) {
 		nextName := strings.Join(names[1:], ".")
 		return field.writer.LinkGet(nextName)
 	}
-	if len(field.keyField) > 0 {
-		field.updateKeys()
-		for k, v := range field.keys {
-			if k == names[1] {
-				return v.LinkGet(strings.Join(names[2:], "."))
-			}
+	if field.isSlice {
+		atoi, err := strconv.Atoi(names[1])
+		if err != nil {
+			return nil, false // todo 优化报错
 		}
+		if field.value.Len() <= atoi {
+			return nil, false
+		}
+		writer, err := subWriter(field.value.Index(atoi))
+		if err != nil {
+			return nil, false
+		}
+		return writer.LinkGet(strings.Join(names[2:], "."))
+	} else if field.isMap {
+		sub := reflect.Indirect(field.value).MapIndex(reflect.Indirect(reflect.ValueOf(names[1])))
+		if sub.IsZero() {
+			return nil, false
+		}
+		writer, err := subWriter(sub)
+		if err != nil {
+			return nil, false
+		}
+		return writer.LinkGet(strings.Join(names[2:], "."))
 	}
 	return nil, false
 }
@@ -250,13 +322,19 @@ func (s *writeImpl) LinkAppend(linkName string, value ...any) error {
 		nextName := strings.Join(names[1:], ".")
 		return field.writer.LinkAppend(nextName, value...)
 	}
-	if len(field.keyField) > 0 {
-		field.updateKeys()
-		for k, v := range field.keys {
-			if k == names[1] {
-				return v.LinkAppend(strings.Join(names[2:], "."), value...)
-			}
+	if field.isSlice {
+		atoi, err := strconv.Atoi(names[1])
+		if err != nil {
+			return err // todo 优化报错
 		}
+		if field.value.Len() <= atoi {
+			return errors.New(fmt.Sprintf("index out of range [%d] with length %d", atoi, field.value.Len()))
+		}
+		writer, err := subWriter(field.value.Index(atoi))
+		if err != nil {
+			return err
+		}
+		return writer.LinkAppend(strings.Join(names[2:], "."), value...)
 	}
 	return fmt.Errorf("field %s is not a slice", name)
 }
@@ -276,13 +354,19 @@ func (s *writeImpl) LinkRemove(linkName string, i, j int) error {
 		nextName := strings.Join(names[1:], ".")
 		return field.writer.LinkRemove(nextName, i, j)
 	}
-	if len(field.keyField) > 0 {
-		field.updateKeys()
-		for k, v := range field.keys {
-			if k == names[1] {
-				return v.LinkRemove(strings.Join(names[2:], "."), i, j)
-			}
+	if field.isSlice {
+		atoi, err := strconv.Atoi(names[1])
+		if err != nil {
+			return err // todo 优化报错
 		}
+		if field.value.Len() <= atoi {
+			return errors.New(fmt.Sprintf("index out of range [%d] with length %d", atoi, field.value.Len()))
+		}
+		writer, err := subWriter(field.value.Index(atoi))
+		if err != nil {
+			return err
+		}
+		return writer.LinkRemove(strings.Join(names[2:], "."), i, j)
 	}
 	return fmt.Errorf("field %s is not a slice", name)
 }
@@ -318,6 +402,7 @@ func subWriter(value any) (writer Writer, err error) {
 		valueOf = reflect.ValueOf(value)
 	}
 	for {
+		fmt.Println(valueOf.Kind())
 		if valueOf.Kind() != reflect.Ptr && valueOf.Kind() != reflect.Interface {
 			break
 		}
@@ -341,30 +426,13 @@ func subWriter(value any) (writer Writer, err error) {
 				return nil, e
 			}
 			impl.writer = w
-		} else if field.Type.Kind() == reflect.Pointer {
-			w, e := subWriter(valueOf.Field(i))
-			if e != nil {
-				err = e
-				return
+		} else if field.Type.Kind() == reflect.Pointer { // todo暂时不要支持指针？
+			elem := field.Type.Elem()
+			if elem.Kind() == reflect.Map {
+				impl.isMap = true
 			}
-			impl.writer = w
 		} else if field.Type.Kind() == reflect.Slice {
-			tagStr := field.Tag.Get("dynamic")
-			if len(tagStr) > 0 {
-				tags := strings.Split(tagStr, ",")
-				for _, tag := range tags {
-					infos := strings.Split(tag, ":")
-					if len(infos) == 2 {
-						k, v := infos[0], infos[1]
-						if k == "key" {
-							impl.keys = make(map[string]Writer)
-							impl.keyField = v // TODO 检查该字段是否存在
-						}
-					} else {
-						log.Printf("got error tag:%s", tagStr)
-					}
-				}
-			}
+			impl.isSlice = true
 		}
 		fields[field.Name] = impl
 	}

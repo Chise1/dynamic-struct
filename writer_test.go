@@ -285,12 +285,49 @@ func TestSubSliceFinal(t *testing.T) {
 	assert.Equal(t, nil, err)
 	fmt.Println(instance)
 	writer, err = NewWriter(&instance)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sl, found := writer.LinkGet("SubStruct2.SubStruct.2.Index")
-	if !found {
-		t.Fatal("not found")
-	}
-	fmt.Println(sl)
+	assert.Equal(t, nil, err)
+	sl, found := writer.LinkGet("SubStruct2.SubStruct.0.Index")
+	assert.Equal(t, true, found)
+	assert.Equal(t, 2, sl)
+	err = writer.LinkSet("SubStruct2.SubStruct.0.Index", 3)
+	assert.Equal(t, nil, err)
+	sl, found = writer.LinkGet("SubStruct2.SubStruct.0.Index")
+	assert.Equal(t, true, found)
+	assert.Equal(t, 3, sl)
+}
+func TestMap(t *testing.T) {
+	var subSt1 = NewStruct().AddField("Index", 0, `json:"index"`).AddField(
+		"Map", subInstance.NewMapOfStructs(""), "").Build()
+	data := `{"index":10,"Map":{"text1":{"int":1,"someText":"text1"}}}`
+	instance := subSt1.New()
+	err := json.Unmarshal([]byte(data), instance)
+	assert.Equal(t, nil, err)
+	marshal, err := json.Marshal(instance)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, data, string(marshal))
+	writer, err := NewWriter(instance)
+	assert.Equal(t, nil, err)
+	err = writer.LinkSet("Map.text1.Integer", 2)
+	assert.Equal(t, nil, err)
+	err = writer.LinkSet("Map.text1.Integer", "2")
+	assert.NotEqual(t, nil, err)
+	bytes, err := json.Marshal(instance)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, `{"index":10,"Map":{"text1":{"int":2,"someText":"text1"}}}`, string(bytes))
+	ret, found := writer.LinkGet("Map.text1.Integer")
+	assert.Equal(t, true, found)
+	assert.Equal(t, 2, ret.(int))
+}
+func TestX(t *testing.T) {
+	test := map[string]struct {
+		Name string
+		Age  int
+	}{"zs": {"zs", 10}}
+	Pass(test)
+}
+func Pass(d interface{}) {
+	mydata := reflect.ValueOf(d).MapIndex(reflect.ValueOf("zs"))
+	newValue := reflect.New(mydata.Type())
+	// todo copy mydata to newValue and set value
+	newValue.Elem().Field(0).Set(reflect.ValueOf("zs2"))
 }
