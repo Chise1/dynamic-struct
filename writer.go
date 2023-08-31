@@ -21,8 +21,7 @@ type Writer interface {
 	LinkAppend(name string, value ...any) error
 	LinkRemove(linkName string, i, j int) error
 	// map
-	Store(name string, key any, value any) error
-	Load(name string, key any) (any, error)
+	Delete(name string, key string) error
 	// get sub struct writer ptr
 	// link set sub struct field value
 	LinkSet(name string, value any) error
@@ -45,55 +44,45 @@ type writeImpl struct {
 	value      any
 }
 
-func (s *writeFieldImpl) updateKeys() {
-	//if len(s.keyField) == 0 || s.seted == s.geted {
-	//	return
-	//}
-	//s.geted = s.seted
-	return
-}
-func (s *writeFieldImpl) updateStmp() {
-	//s.seted = time.Now().Unix()
-}
-
-func (s *writeImpl) Load(name string, key any) (value any, err error) {
-	defer func() {
-		er := recover()
-		if er != nil {
-			err = errors.New(er.(string))
-		}
-	}()
-	field, ok := s.fields[name]
-	if !ok {
-		return nil, errors.New("not found field " + name)
-	}
-	if s.fieldsType[name] == reflect.Pointer && field.value.Type().Elem().Kind() == reflect.Map {
-		if field.value.Type().Key().Kind() != reflect.TypeOf(key).Kind() {
-			return nil, fmt.Errorf("key type is error! need %s,but got %s", field.value.Type().Key().Kind().String(), reflect.TypeOf(key).Kind().String())
-		}
-		return field.value.MapIndex(reflect.ValueOf(key)), nil
-	}
-	return
-}
-func (s *writeImpl) Store(name string, key any, value any) (err error) {
-	defer func() {
-		er := recover()
-		if er != nil {
-			err = errors.New(er.(string))
-		}
-	}()
-	field, ok := s.fields[name]
-	if !ok {
-		return errors.New("not found field " + name)
-	}
-	if s.fieldsType[name] == reflect.Pointer && field.value.Type().Elem().Kind() == reflect.Map {
-		if field.value.Type().Key().Kind() != reflect.TypeOf(key).Kind() {
-			return fmt.Errorf("key type is error! need %s,but got %s", field.value.Type().Key().Kind().String(), reflect.TypeOf(key).Kind().String())
-		}
-		field.value.SetMapIndex(reflect.ValueOf(key), reflect.ValueOf(value))
-	}
-	return
-}
+//	func (s *writeImpl) Load(name string, key any) (value any, err error) {
+//		defer func() {
+//			er := recover()
+//			if er != nil {
+//				err = errors.New(er.(string))
+//			}
+//		}()
+//		field, ok := s.fields[name]
+//		if !ok {
+//			return nil, errors.New("not found field " + name)
+//		}
+//		if s.fieldsType[name] == reflect.Pointer && field.value.Type().Elem().Kind() == reflect.Map {
+//			if field.value.Type().Key().Kind() != reflect.TypeOf(key).Kind() {
+//				return nil, fmt.Errorf("key type is error! need %s,but got %s", field.value.Type().Key().Kind().String(), reflect.TypeOf(key).Kind().String())
+//			}
+//			return field.value.MapIndex(reflect.ValueOf(key)), nil
+//		}
+//		return
+//	}
+//
+//	func (s *writeImpl) Store(name string, key any, value any) (err error) {
+//		defer func() {
+//			er := recover()
+//			if er != nil {
+//				err = errors.New(er.(string))
+//			}
+//		}()
+//		field, ok := s.fields[name]
+//		if !ok {
+//			return errors.New("not found field " + name)
+//		}
+//		if s.fieldsType[name] == reflect.Pointer && field.value.Type().Elem().Kind() == reflect.Map {
+//			if field.value.Type().Key().Kind() != reflect.TypeOf(key).Kind() {
+//				return fmt.Errorf("key type is error! need %s,but got %s", field.value.Type().Key().Kind().String(), reflect.TypeOf(key).Kind().String())
+//			}
+//			field.value.SetMapIndex(reflect.ValueOf(key), reflect.ValueOf(value))
+//		}
+//		return
+//	}
 func (s *writeImpl) Set(name string, value any) (err error) {
 	defer func() {
 		er := recover()
@@ -118,7 +107,23 @@ func (s *writeImpl) Set(name string, value any) (err error) {
 		}
 	}
 	field.value.Set(reflect.ValueOf(value))
-	field.updateStmp()
+	return
+}
+func (s *writeImpl) Delete(name string, key string) (err error) {
+	defer func() {
+		er := recover()
+		if er != nil {
+			err = errors.New(er.(string))
+		}
+	}()
+	field, ok := s.fields[name]
+	if !ok {
+		return errors.New("not found field " + name)
+	}
+	if !field.isMap {
+		return errors.New("field " + name + " is not map")
+	}
+	reflect.Indirect(field.value).SetMapIndex(reflect.ValueOf(key), reflect.Value{})
 	return
 }
 
@@ -127,7 +132,6 @@ func (s *writeImpl) Get(name string) (any, bool) {
 	if !ok {
 		return nil, false
 	}
-	field.updateKeys()
 	return field.value.Interface(), true
 }
 
@@ -177,13 +181,17 @@ func (s *writeImpl) LinkSet(linkName string, value any) error {
 		return writer.LinkSet(strings.Join(names[2:], "."), value)
 	} else if field.isMap {
 		sub := reflect.Indirect(field.value).MapIndex(reflect.Indirect(reflect.ValueOf(names[1])))
-		if sub.IsZero() {
-			return errors.New("can not found " + names[1])
+		var x reflect.Value
+		if sub.IsValid() {
+			x = reflect.New(sub.Type())
+			x.Elem().Set(sub)
+		} else {
+			if len(names) == 2 {
+				reflect.Indirect(field.value).SetMapIndex(reflect.ValueOf(names[1]), reflect.ValueOf(value))
+				return nil
+			}
+			x = reflect.New(field.value.Type().Elem())
 		}
-
-		x := reflect.New(sub.Type())
-		x.Elem().Set(sub)
-
 		writer, err := subWriter(x)
 		if err != nil {
 			return err // todo 优化报错
@@ -199,7 +207,6 @@ func (s *writeImpl) LinkSet(linkName string, value any) error {
 		nextName := strings.Join(names[1:], ".")
 		return field.writer.LinkSet(nextName, value)
 	}
-	field.updateStmp()
 	return fmt.Errorf("field %s is not a struct", name)
 }
 
@@ -214,7 +221,6 @@ func (s *writeImpl) LinkGet(linkName string) (any, bool) {
 	if !ok {
 		return nil, false
 	}
-	field.updateKeys()
 	if field.writer != nil {
 		nextName := strings.Join(names[1:], ".")
 		return field.writer.LinkGet(nextName)
@@ -246,16 +252,12 @@ func (s *writeImpl) LinkGet(linkName string) (any, bool) {
 	return nil, false
 }
 func (s *writeImpl) GetInstance() any {
-	for _, field := range s.fields {
-		field.updateKeys()
-	}
 	return s.value
 }
 
 // append values to slice
 func (s *writeImpl) Append(name string, values ...any) error {
 	field, ok := s.fields[name]
-	field.updateKeys()
 	if !ok {
 		return errors.New("not found field " + name)
 	}
@@ -282,7 +284,6 @@ func (s *writeImpl) Append(name string, values ...any) error {
 		newSlice.Index(oldLen + i).Set(value)
 	}
 	field.value.Set(newSlice)
-	field.updateStmp()
 	return nil
 }
 
@@ -292,7 +293,6 @@ func (s *writeImpl) Remove(name string, i, j int) error {
 	if !ok {
 		return errors.New("not found field " + name)
 	}
-	field.updateKeys()
 	oldLen := field.value.Len()
 	if i < 0 || i >= j || i >= oldLen {
 		return errors.New("index is error")
@@ -304,7 +304,6 @@ func (s *writeImpl) Remove(name string, i, j int) error {
 		reflect.Copy(newSlice.Slice(i, newLen), field.value.Slice(j, oldLen))
 	}
 	field.value.Set(newSlice)
-	field.updateStmp()
 	return nil
 }
 

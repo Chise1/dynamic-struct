@@ -63,9 +63,12 @@ func TestSubSliceStruct(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fmt.Sprintf("%v", instance) != "&{123 example 123.45 true [1 2 3]  {0 } [{1} {2}]}" {
-		t.Fatal("not equal")
-	}
+	assert.Equal(t, "&{123 example 123.45 true [1 2 3]  {0 } [{1} {2}]}", fmt.Sprintf("%v", instance))
+	err = writer.Remove("SubStruct", 0, 1)
+	assert.Equal(t, nil, err)
+	fmt.Printf("%v", instance)
+	assert.Equal(t, "&{123 example 123.45 true [1 2 3]  {0 } [{2}]}", fmt.Sprintf("%v", instance))
+
 }
 func TestNewWriter(t *testing.T) {
 	data := []byte(`
@@ -317,17 +320,43 @@ func TestMap(t *testing.T) {
 	ret, found := writer.LinkGet("Map.text1.Integer")
 	assert.Equal(t, true, found)
 	assert.Equal(t, 2, ret.(int))
+	err = writer.LinkSet("Map.text2", struct {
+		Integer int    `json:"int"`
+		Text    string `json:"someText"`
+	}{22, "text2"})
+	assert.Equal(t, nil, err)
+	bytes, err = json.Marshal(instance)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, `{"index":10,"Map":{"text1":{"int":2,"someText":"text1"},"text2":{"int":22,"someText":"text2"}}}`, string(bytes))
+	err = writer.Delete("Map", "text1")
+	assert.Equal(t, nil, err)
+	bytes, err = json.Marshal(instance)
+	assert.Equal(t, `{"index":10,"Map":{"text2":{"int":22,"someText":"text2"}}}`, string(bytes))
 }
-func TestX(t *testing.T) {
-	test := map[string]struct {
-		Name string
-		Age  int
-	}{"zs": {"zs", 10}}
-	Pass(test)
-}
-func Pass(d interface{}) {
-	mydata := reflect.ValueOf(d).MapIndex(reflect.ValueOf("zs"))
-	newValue := reflect.New(mydata.Type())
-	// todo copy mydata to newValue and set value
-	newValue.Elem().Field(0).Set(reflect.ValueOf("zs2"))
+func TestSlice(t *testing.T) {
+	var subSt1 = NewStruct().AddField("Index", 0, `json:"index"`).AddField(
+		"Slice", subInstance.ZeroSliceOfStructs(), "").Build()
+	data := `{"index":10,"Slice":[{"int":1,"someText":"text1"}]}`
+	instance := subSt1.New()
+	err := json.Unmarshal([]byte(data), instance)
+	assert.Equal(t, nil, err)
+	marshal, err := json.Marshal(instance)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, data, string(marshal))
+	var subSt2 = NewStruct().AddField("Sub", subSt1.Zero(), "").Build()
+	instance2 := subSt2.New()
+	data2 := `{"Sub":{"index":10,"Slice":[{"int":1,"someText":"text1"}]}}`
+	err = json.Unmarshal([]byte(data2), instance2)
+	assert.Equal(t, "&{Sub:{Index:10 Slice:[{Integer:1 Text:text1}]}}", fmt.Sprintf("%+v", instance2))
+	writer2, err := NewWriter(instance2)
+	assert.Equal(t, nil, err)
+	err = writer2.LinkAppend("Sub.Slice", struct {
+		Integer int    `json:"int"`
+		Text    string `json:"someText"`
+	}{2, "text2"})
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "&{Sub:{Index:10 Slice:[{Integer:1 Text:text1} {Integer:2 Text:text2}]}}", fmt.Sprintf("%+v", instance2))
+	err = writer2.LinkRemove("Sub.Slice", 1, 2)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "&{Sub:{Index:10 Slice:[{Integer:1 Text:text1}]}}", fmt.Sprintf("%+v", instance2))
 }
