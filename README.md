@@ -1,6 +1,7 @@
-[![Go Reference](https://pkg.go.dev/badge/github.com/Ompluscator/dynamic-struct.svg)](https://pkg.go.dev/github.com/Ompluscator/dynamic-struct)
-![Coverage](https://img.shields.io/badge/Coverage-92.6%25-brightgreen)
-[![Go Report Card](https://goreportcard.com/badge/github.com/ompluscator/dynamic-struct)](https://goreportcard.com/report/github.com/ompluscator/dynamic-struct)
+[//]: # ([![Go Reference]&#40;https://pkg.go.dev/badge/github.com/Ompluscator/dynamic-struct.svg&#41;]&#40;https://pkg.go.dev/github.com/Ompluscator/dynamic-struct&#41;)
+
+[//]: # (![Coverage]&#40;https://img.shields.io/badge/Coverage-92.6%25-brightgreen&#41;)
+[//]: # ([![Go Report Card]&#40;https://goreportcard.com/badge/github.com/ompluscator/dynamic-struct&#41;]&#40;https://goreportcard.com/report/github.com/ompluscator/dynamic-struct&#41;)
 
 # Modify
 add writer,can be used for writing to dynamic struct pointer.
