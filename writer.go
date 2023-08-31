@@ -21,7 +21,7 @@ type Writer interface {
 	LinkAppend(name string, value ...any) error
 	LinkRemove(linkName string, i, j int) error
 	// map
-	Delete(name string, key string) error
+	Delete(name string, key any) error
 	// get sub struct writer ptr
 	// link set sub struct field value
 	LinkSet(name string, value any) error
@@ -109,7 +109,7 @@ func (s *writeImpl) Set(name string, value any) (err error) {
 	field.value.Set(reflect.ValueOf(value))
 	return
 }
-func (s *writeImpl) Delete(name string, key string) (err error) {
+func (s *writeImpl) Delete(name string, key any) (err error) {
 	defer func() {
 		er := recover()
 		if er != nil {
