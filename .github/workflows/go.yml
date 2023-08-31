@@ -26,9 +26,14 @@ jobs:
 
     - name: Test
       run: make test
-    - uses: coverage-robot/action@v1
+      
+    - name: Coverage Robot Action
+      # You may pin to the exact commit or the version.
+      # uses: coverage-robot/action@453c16688719c0d30d4162737a44d0f0a83a014b
+      uses: coverage-robot/action@v1.0.0
       with:
-        token: ${{ secrets.COVERAGE_TOKEN }}
+        # Multi-line selection of coverage files to upload
         files: |
             ./coverage.xml
-        tag: api-service
+        token:  ${{ secrets.COVERAGE_TOKEN }}
+        # The GitHub token used to communicate with the Github API
