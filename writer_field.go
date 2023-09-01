@@ -20,10 +20,6 @@ func (s *scalarImpl) Set(value any) (err error) {
 	s.value.Set(reflect.ValueOf(value))
 	return
 }
-func (s *scalarImpl) Delete(_ string, _ any) (err error) {
-	s.value.SetZero()
-	return
-}
 
 func (s *scalarImpl) Get() (any, bool) {
 	return s.value.Interface(), true
@@ -37,9 +33,6 @@ func (s *scalarImpl) linkSet(_ []string, value any) error {
 // can set struct.substruct field value
 func (s *scalarImpl) linkGet(_ []string) (any, bool) {
 	return s.Get()
-}
-func (s *scalarImpl) GetInstance() any {
-	return s.value.Interface()
 }
 
 // can set struct.substruct field value

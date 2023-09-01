@@ -81,7 +81,11 @@ func (s *mapImpl) linkGet(names []string) (any, bool) {
 	}
 	key := names[0]
 	if len(names) == 1 {
-		return reflect.Indirect(s.value).MapIndex(reflect.Indirect(reflect.ValueOf(key))), true
+		ret := reflect.Indirect(s.value).MapIndex(reflect.Indirect(reflect.ValueOf(key)))
+		if ret.IsValid() {
+			return ret.Interface(), true
+		}
+		return nil, false
 	}
 
 	var writer Writer
@@ -104,8 +108,4 @@ func (s *mapImpl) linkGet(names []string) (any, bool) {
 		s.mapWriters[key] = writer
 	}
 	return writer.linkGet(names[1:])
-}
-
-func (s *mapImpl) GetInstance() any {
-	return s.value.Interface()
 }

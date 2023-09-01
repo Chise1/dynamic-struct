@@ -2,6 +2,7 @@ package dynamicstruct
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ func (s *sliceImpl) Set(value any) (err error) {
 		}
 	}()
 	s.value.Set(reflect.ValueOf(value))
+	s.mapWriters = make(map[any]Writer)
 	return
 }
 
@@ -59,7 +61,7 @@ func (s *sliceImpl) linkSet(names []string, value any) error {
 		x := reflect.MakeSlice(s.value.Type(), atoi-s.value.Len()+1, atoi-s.value.Len()+1)
 		s.value.Set(reflect.AppendSlice(s.value, x))
 	} else if atoi == s.value.Len() {
-		s.value.Set(reflect.AppendSlice(s.value, reflect.Zero(s.value.Type())))
+		s.value.Set(reflect.Append(s.value, reflect.Zero(s.value.Type().Elem())))
 	}
 
 	var writer Writer
@@ -91,9 +93,6 @@ func (s *sliceImpl) linkGet(names []string) (any, bool) {
 	return nil, false
 
 }
-func (s *sliceImpl) GetInstance() any {
-	return s.value.Interface()
-}
 
 func (s *sliceImpl) LinkSet(linkName string, value any) error {
 	return s.linkSet(strings.Split(linkName, SqliteSeq), value)
@@ -116,8 +115,8 @@ func (s *sliceImpl) computeIndex(atoiStr string) (int, error) {
 	} else {
 		var flag bool
 		for i := 0; i < s.value.Len(); i++ {
-			sub := s.value.Index(i).FieldByName(s.sliceToMap)
-			if sub.String() == atoiStr {
+			sub := fmt.Sprint(s.value.Index(i).FieldByName(s.sliceToMap).Interface())
+			if sub == atoiStr {
 				atoi = i
 				flag = true
 				break

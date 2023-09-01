@@ -260,19 +260,20 @@ func TestSubSliceFinal(t *testing.T) {
 	subList = sub1Val.Interface()
 	var subSt2 = NewStruct().AddField("Index", "", `json:"index"`).
 		AddField("SubStruct", subList, `json:"sub" dynamic:"key:Index"`).Build()
-	sub2 := subSt2.Zero()
-	writer, err := NewWriter(&sub2)
+	sub2 := subSt2.New()
+	writer, err := NewWriter(sub2)
 	if err != nil {
 		t.Log(err)
 	}
-	writer.LinkSet("SubStruct", sub1)
-	writer.LinkSet("Index", "111")
-	fmt.Println(sub2)
+	err = writer.LinkSet("SubStruct.*", reflect.Indirect(reflect.ValueOf(sub1)).Interface())
+	assert.Equal(t, nil, err)
+
+	err = writer.LinkSet("Index", "111")
+	assert.Equal(t, nil, err)
 	subl2 := subSt2.ZeroSliceOfStructs()
-	fmt.Println(subl2)
 
 	sub2Val := reflect.ValueOf(subl2)
-	sub2Val = reflect.Append(sub2Val, reflect.ValueOf(sub2))
+	sub2Val = reflect.Append(sub2Val, reflect.Indirect(reflect.ValueOf(sub2)))
 	subl2 = sub2Val.Interface()
 	var Instance3 = NewStruct().
 		AddField("Integer", 0, `json:"int"`).
@@ -281,8 +282,7 @@ func TestSubSliceFinal(t *testing.T) {
 		AddField("Boolean", false, "").
 		AddField("Slice", []int{}, "").
 		AddField("Anonymous", "", `json:"-"`).
-		//AddField("SubStruct1", subList, `json:"subStruct1" dynamic:"key:Index"`).
-		AddField("SubStruct2", sub2, `json:"subStruct2"`).
+		AddField("SubStruct2", subSt2.Zero(), `json:"subStruct2"`).
 		Build()
 	instance := Instance3.New()
 	//marshal, _ := json.Marshal(instance)
@@ -290,7 +290,7 @@ func TestSubSliceFinal(t *testing.T) {
 	err = json.Unmarshal([]byte(data), instance)
 	assert.Equal(t, nil, err)
 	fmt.Println(instance)
-	writer, err = NewWriter(&instance)
+	writer, err = NewWriter(instance)
 	assert.Equal(t, nil, err)
 	sl, found := writer.LinkGet("SubStruct2.SubStruct.0.Index")
 	assert.Equal(t, true, found)
@@ -364,4 +364,133 @@ func TestSlice(t *testing.T) {
 	err = writer2.LinkSet("Sub.Slice.2", nil)
 	assert.Equal(t, nil, err)
 	assert.Equal(t, "&{Sub:{Index:10 Slice:[{Integer:1 Text:text1} {Integer:0 Text:}]}}", fmt.Sprintf("%+v", instance2))
+}
+
+type s struct {
+	Integer int `json:"int"`
+	Sub     []struct {
+		Index int
+		Name  string
+	} `dynamic:"sliceKey=Index"`
+}
+
+func TestSliceMap(t *testing.T) {
+	s1 := s{}
+	writer, err := NewWriter(&s1)
+	assert.Equal(t, nil, err)
+	err = writer.LinkSet("Sub.10", struct {
+		Index int
+		Name  string
+	}{10, "shi"})
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "{0 [{10 shi}]}", fmt.Sprint(s1))
+	err = writer.LinkSet("Sub.20", struct {
+		Index int
+		Name  string
+	}{20, "ershi"})
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "{0 [{10 shi} {20 ershi}]}", fmt.Sprint(s1))
+	assert.Equal(t, "{20 ershi} true", fmt.Sprint(writer.LinkGet("Sub.20")))
+	assert.Equal(t, `not found field Integer2`, writer.LinkSet("Integer2", 2).Error())
+	assert.Equal(t, "<nil> false", fmt.Sprint(writer.LinkGet("Integer2")))
+}
+
+type s2 struct {
+	Integer int `json:"int"`
+	Sub     []sub
+}
+
+func TestSliceSub(t *testing.T) {
+	s1 := s2{}
+	writer, err := NewWriter(&s1)
+	assert.Equal(t, nil, err)
+	err = writer.LinkSet("Sub.1", struct {
+		Index int
+		Name  string
+	}{10, "shi"})
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "{0 [{0 } {10 shi}]}", fmt.Sprint(s1))
+	err = writer.LinkSet("Sub.3.Name", "30")
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "{0 [{0 } {10 shi} {0 } {0 30}]}", fmt.Sprint(s1))
+	err = writer.LinkSet("Sub.3.Index", "30")
+	assert.NotEqual(t, nil, err)
+	assert.Equal(t, "{0 [{0 } {10 shi} {0 } {0 30}]}", fmt.Sprint(s1))
+	err = writer.LinkSet("Sub.3.Index", 30)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "{0 [{0 } {10 shi} {0 } {30 30}]}", fmt.Sprint(s1))
+	err = writer.LinkSet("Sub.x.Index", 30)
+	assert.NotEqual(t, nil, err)
+	index, found := writer.LinkGet("Sub.4.Index")
+	assert.Equal(t, false, found)
+	assert.Equal(t, nil, index)
+	d, f := writer.LinkGet("Sub.3")
+	assert.Equal(t, true, f)
+	assert.Equal(t, "{30 30}", fmt.Sprint(d))
+	err = writer.Set(s2{
+		10, []sub{{10, "f10"}},
+	})
+	assert.Equal(t, nil, err)
+	val, f := writer.Get()
+	assert.Equal(t, true, f)
+	marshal, err := json.Marshal(val)
+	assert.Equal(t, nil, err)
+	bytes, err := json.Marshal(s1)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, true, string(marshal) == string(bytes) && string(marshal) == `{"int":10,"Sub":[{"Index":10,"Name":"f10"}]}`)
+	val, found = writer.LinkGet("Sub")
+	assert.Equal(t, true, found)
+	assert.Equal(t, "[{10 f10}]", fmt.Sprint(val))
+	err = writer.LinkSet("Sub.0", struct {
+		Index int
+		Name  string
+	}{100, "x100"})
+	assert.Equal(t, nil, err)
+	val, found = writer.LinkGet("Sub.x")
+	assert.Equal(t, nil, val)
+	assert.Equal(t, false, found)
+	val, found = writer.LinkGet("Sub")
+	assert.Equal(t, "[{100 x100}]", fmt.Sprint(val))
+	err = writer.LinkSet("Sub.1.Index", 200)
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "{10 [{100 x100} {200 }]}", fmt.Sprint(s1))
+}
+
+type sub struct {
+	Index int
+	Name  string
+}
+type m struct {
+	Index int
+	//M     map[string][]sub
+	M2 map[string]sub
+	M3 map[string]string
+}
+
+func TestMapImpl(t *testing.T) {
+	s := m{}
+	writer, err := NewWriter(&s)
+	assert.Equal(t, nil, err)
+	err = writer.LinkSet("M3", map[string]string{
+		"zhangsan": "ei",
+	})
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "{0 map[] map[zhangsan:ei]}", fmt.Sprint(s))
+	err = writer.LinkSet("M2.1", sub{Index: 1, Name: "lisi"})
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "{0 map[1:{1 lisi}] map[zhangsan:ei]}", fmt.Sprint(s))
+	//err = writer.LinkSet("M.1.Name", "wangmazi")
+	//assert.Equal(t, nil, err)
+	//assert.Equal(t, "{0 map[] map[1:{1 lisi}] map[zhangsan:ei]}", fmt.Sprint(s))
+	val, found := writer.LinkGet("M2.1.Index")
+	assert.Equal(t, true, found)
+	assert.Equal(t, 1, val)
+	_, found = writer.LinkGet("M2.3")
+	assert.Equal(t, false, found)
+	val, found = writer.LinkGet("M2.1")
+	assert.Equal(t, true, found)
+	assert.Equal(t, "{1 lisi}", fmt.Sprint(val))
+	val, found = writer.LinkGet("M2")
+	assert.Equal(t, true, found)
+	assert.Equal(t, "map[1:{1 lisi}]", fmt.Sprint(val))
 }

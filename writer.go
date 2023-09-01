@@ -17,9 +17,9 @@ type Writer interface {
 	LinkGet(name string) (any, bool)
 	linkSet(names []string, value any) error // slice map 删除则设置为value nil
 	linkGet(names []string) (any, bool)
-	GetInstance() any
 }
 
+// todo add support slice map
 func subWriter(value any) (writer Writer, err error) {
 	defer func() {
 		rec := recover()
@@ -63,6 +63,12 @@ func subWriter(value any) (writer Writer, err error) {
 				return nil, errors.New("not suport pointer")
 			}
 
+		} else if field.Type.Kind() == reflect.Map { // todo暂时不要支持指针？
+			valueOf.Field(i).Set(reflect.MakeMap(valueOf.Field(i).Type()))
+			impl = &mapImpl{
+				mapWriters: make(map[any]Writer),
+				value:      valueOf.Field(i),
+			}
 		} else if field.Type.Kind() == reflect.Slice {
 			slice := &sliceImpl{
 				value:      valueOf.Field(i),
@@ -72,7 +78,7 @@ func subWriter(value any) (writer Writer, err error) {
 			if len(tagStr) > 0 {
 				tags := strings.Split(tagStr, ",")
 				for _, tag := range tags {
-					infos := strings.Split(tag, ":")
+					infos := strings.Split(tag, "=")
 					if len(infos) == 2 {
 						k, v := infos[0], infos[1]
 						if k == "sliceKey" {

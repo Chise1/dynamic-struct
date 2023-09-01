@@ -59,6 +59,3 @@ func (s *structImpl) linkGet(names []string) (any, bool) {
 	}
 	return field.linkGet(names[1:])
 }
-func (s *structImpl) GetInstance() any {
-	return s.value.Interface()
-}
