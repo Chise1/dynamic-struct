@@ -279,7 +279,7 @@ func TestSubSliceFinal(t *testing.T) {
 		AddField("Slice", []int{}, "").
 		AddField("Anonymous", "", `json:"-"`).
 		//AddField("SubStruct1", subList, `json:"subStruct1" dynamic:"key:Index"`).
-		AddField("SubStruct2", sub2, `json:"subStruct2" dynamic:"key:Index"`).
+		AddField("SubStruct2", sub2, `json:"subStruct2"`).
 		Build()
 	instance := Instance3.New()
 	//marshal, _ := json.Marshal(instance)
@@ -294,6 +294,7 @@ func TestSubSliceFinal(t *testing.T) {
 	assert.Equal(t, 2, sl)
 	err = writer.LinkSet("SubStruct2.SubStruct.0.Index", 3)
 	assert.Equal(t, nil, err)
+	fmt.Println(instance)
 	sl, found = writer.LinkGet("SubStruct2.SubStruct.0.Index")
 	assert.Equal(t, true, found)
 	assert.Equal(t, 3, sl)

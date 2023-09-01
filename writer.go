@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"reflect"
 	"strconv"
 	"strings"
@@ -31,12 +32,14 @@ type Writer interface {
 	json.Marshaler
 }
 type writeFieldImpl struct {
-	field   reflect.StructField
-	value   reflect.Value
-	isSlice bool // 是切片
-	isMap   bool
-	writer  Writer
-	key     reflect.Kind
+	field      reflect.StructField
+	value      reflect.Value
+	isSlice    bool // 是切片
+	isMap      bool
+	key        reflect.Kind
+	sliceToMap string //以map形式存储切片
+	writer     Writer
+	mapWriters map[any]Writer
 }
 type writeImpl struct {
 	fields     map[string]writeFieldImpl
@@ -96,14 +99,14 @@ func (s *writeImpl) Set(name string, value any) (err error) {
 	}
 	valueType := reflect.TypeOf(value)
 	if valueType.Kind() != s.fieldsType[name] {
-		return fmt.Errorf("type mismatch :%s --- %s", valueType.Kind().String(), s.fieldsType[name].String())
+		return fmt.Errorf("type mismatch :%s - %s", valueType.Kind().String(), s.fieldsType[name].String())
 	}
 	if valueType.Name() != field.value.Type().Name() {
 		return errors.New("struct must be same")
 	}
 	if valueType.Kind() == reflect.Slice {
 		if valueType.Elem().Kind() != field.value.Type().Elem().Kind() {
-			return fmt.Errorf("type mismatch :%s --- %s", valueType.Elem().Kind().String(), field.value.Type().Elem().Kind())
+			return fmt.Errorf("type mismatch :%s - %s", valueType.Elem().Kind().String(), field.value.Type().Elem().Kind())
 		}
 	}
 	field.value.Set(reflect.ValueOf(value))
@@ -161,39 +164,77 @@ func (s *writeImpl) LinkSet(linkName string, value any) error {
 		return errors.New("not found field " + name)
 	}
 	if field.isSlice {
-		atoi, err := strconv.Atoi(names[1])
-		if err != nil {
-			return err // todo 优化报错
-		}
-		if field.value.Len() <= atoi {
-			return errors.New(fmt.Sprintf("index out of range [%d] with length %d", atoi, field.value.Len()))
-		}
-		writer, err := subWriter(field.value.Index(atoi))
-		if err != nil {
-			return err
-		}
-		return writer.LinkSet(strings.Join(names[2:], SqliteSeq), value)
-	} else if field.isMap {
-		sub := reflect.Indirect(field.value).MapIndex(reflect.Indirect(reflect.ValueOf(names[1])))
-		var x reflect.Value
-		if sub.IsValid() {
-			x = reflect.New(sub.Type())
-			x.Elem().Set(sub)
-		} else {
-			if len(names) == 2 {
-				reflect.Indirect(field.value).SetMapIndex(reflect.ValueOf(names[1]), reflect.ValueOf(value))
-				return nil
+		var writer Writer
+		var found bool
+		if len(field.sliceToMap) == 0 {
+			atoi, err := strconv.Atoi(names[1])
+			if err != nil {
+				return err // todo 优化报错
 			}
-			x = reflect.New(field.value.Type().Elem())
+			writer, found = field.mapWriters[atoi]
+			if !found {
+				if field.value.Len() <= atoi {
+					return errors.New(fmt.Sprintf("index out of range [%d] with length %d", atoi, field.value.Len()))
+				}
+				writer, err = subWriter(field.value.Index(atoi))
+				if err != nil {
+					return err
+				}
+				field.mapWriters[atoi] = writer
+				found = true
+			}
+		} else {
+			atoi := names[1]
+			var err error
+			writer, found = field.mapWriters[atoi]
+			if !found {
+				for i := 0; i < field.value.Len(); i++ {
+					sub := field.value.Index(i).FieldByName(field.sliceToMap)
+					if sub.String() == atoi {
+						writer, err = subWriter(field.value.Index(i))
+						if err != nil {
+							return err
+						}
+						field.mapWriters[atoi] = writer
+						found = true
+						break
+					}
+				}
+			}
 		}
-		writer, err := subWriter(x)
-		if err != nil {
-			return err // todo 优化报错
+		if found {
+			return writer.LinkSet(strings.Join(names[2:], SqliteSeq), value)
+		}
+		return errors.New("can not found slice " + names[1])
+	} else if field.isMap {
+		var writer Writer
+		var err error
+		var found bool
+		writer, found = field.mapWriters[names[1]]
+		if !found {
+			sub := reflect.Indirect(field.value).MapIndex(reflect.Indirect(reflect.ValueOf(names[1])))
+			var x reflect.Value
+			if sub.IsValid() {
+				x = reflect.New(sub.Type())
+				x.Elem().Set(sub)
+			} else {
+				if len(names) == 2 {
+					reflect.Indirect(field.value).SetMapIndex(reflect.ValueOf(names[1]), reflect.ValueOf(value))
+					return nil
+				}
+				x = reflect.New(field.value.Type().Elem())
+			}
+			writer, err = subWriter(x)
+			if err != nil {
+				return err // todo 优化报错
+			}
+			ret := writer.LinkSet(strings.Join(names[2:], SqliteSeq), value)
+			if ret == nil {
+				reflect.Indirect(field.value).SetMapIndex(reflect.ValueOf(names[1]), reflect.Indirect(x))
+			}
+			return ret
 		}
 		ret := writer.LinkSet(strings.Join(names[2:], SqliteSeq), value)
-		if ret == nil {
-			reflect.Indirect(field.value).SetMapIndex(reflect.ValueOf(names[1]), reflect.Indirect(x))
-		}
 		return ret
 	}
 
@@ -219,27 +260,65 @@ func (s *writeImpl) LinkGet(linkName string) (any, bool) {
 		nextName := strings.Join(names[1:], SqliteSeq)
 		return field.writer.LinkGet(nextName)
 	}
+
 	if field.isSlice {
-		atoi, err := strconv.Atoi(names[1])
-		if err != nil {
-			return nil, false // todo 优化报错
-		}
-		if field.value.Len() <= atoi {
-			return nil, false
-		}
-		writer, err := subWriter(field.value.Index(atoi))
-		if err != nil {
-			return nil, false
+		var writer Writer
+		if len(field.sliceToMap) == 0 {
+			atoi, err := strconv.Atoi(names[1])
+			if err != nil {
+				return nil, false // todo 优化报错
+			}
+			if field.value.Len() <= atoi {
+				return nil, false
+			}
+			var found bool
+			writer, found = field.mapWriters[atoi]
+			if !found {
+				writer, err = subWriter(field.value.Index(atoi))
+				if err != nil {
+					return nil, false
+				}
+				field.mapWriters[atoi] = writer
+			}
+		} else {
+			var found bool
+			atoi := names[1]
+			writer, found = field.mapWriters[atoi]
+			if !found {
+				var err error
+				var found bool
+				for i := 0; i < field.value.Len(); i++ {
+					sub := field.value.Index(i).FieldByName(field.sliceToMap)
+					if sub.String() == atoi {
+						writer, err = subWriter(field.value.Index(i))
+						if err != nil {
+							log.Println(err.Error())
+							return nil, false
+						}
+						field.mapWriters[atoi] = writer
+						found = true
+						break
+					}
+				}
+				if !found {
+					return nil, false
+				}
+			}
 		}
 		return writer.LinkGet(strings.Join(names[2:], SqliteSeq)) // todo  cache slice and map's subWriter
 	} else if field.isMap {
-		sub := reflect.Indirect(field.value).MapIndex(reflect.Indirect(reflect.ValueOf(names[1])))
-		if sub.IsZero() {
-			return nil, false
-		}
-		writer, err := subWriter(sub)
-		if err != nil {
-			return nil, false
+		writer, found := field.mapWriters[names[1]]
+		if !found {
+			var err error
+			sub := reflect.Indirect(field.value).MapIndex(reflect.Indirect(reflect.ValueOf(names[1])))
+			if sub.IsZero() {
+				return nil, false
+			}
+			writer, err = subWriter(sub)
+			if err != nil {
+				return nil, false
+			}
+			field.mapWriters[names[1]] = writer
 		}
 		return writer.LinkGet(strings.Join(names[2:], SqliteSeq))
 	}
@@ -423,9 +502,26 @@ func subWriter(value any) (writer Writer, err error) {
 			elem := field.Type.Elem()
 			if elem.Kind() == reflect.Map {
 				impl.isMap = true
+				impl.mapWriters = make(map[any]Writer)
 			}
 		} else if field.Type.Kind() == reflect.Slice {
 			impl.isSlice = true
+			impl.mapWriters = make(map[any]Writer)
+			tagStr := field.Tag.Get("dynamic")
+			if len(tagStr) > 0 {
+				tags := strings.Split(tagStr, ",")
+				for _, tag := range tags {
+					infos := strings.Split(tag, ":")
+					if len(infos) == 2 {
+						k, v := infos[0], infos[1]
+						if k == "sliceKey" {
+							impl.sliceToMap = v
+						}
+					} else {
+						log.Printf("got error tag:%s", tagStr)
+					}
+				}
+			}
 		}
 		fields[field.Name] = impl
 	}
