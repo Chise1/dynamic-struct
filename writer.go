@@ -110,12 +110,6 @@ func (s *writeImpl) Set(name string, value any) (err error) {
 	return
 }
 func (s *writeImpl) Delete(name string, key any) (err error) {
-	defer func() {
-		er := recover()
-		if er != nil {
-			err = errors.New(er.(string))
-		}
-	}()
 	field, ok := s.fields[name]
 	if !ok {
 		return errors.New("not found field " + name)
@@ -237,7 +231,7 @@ func (s *writeImpl) LinkGet(linkName string) (any, bool) {
 		if err != nil {
 			return nil, false
 		}
-		return writer.LinkGet(strings.Join(names[2:], SqliteSeq))
+		return writer.LinkGet(strings.Join(names[2:], SqliteSeq)) // todo  cache slice and map's subWriter
 	} else if field.isMap {
 		sub := reflect.Indirect(field.value).MapIndex(reflect.Indirect(reflect.ValueOf(names[1])))
 		if sub.IsZero() {
@@ -442,12 +436,6 @@ func subWriter(value any) (writer Writer, err error) {
 	}, nil
 }
 func NewWriter(value any) (writer Writer, err error) {
-	//defer func() {
-	//	rec := recover()
-	//	if rec != nil {
-	//		err = errors.New(fmt.Sprint(recover()))
-	//	}
-	//}()
 	valueOf := reflect.ValueOf(value)
 	if valueOf.Kind() != reflect.Ptr {
 		fmt.Println(valueOf.Kind())
