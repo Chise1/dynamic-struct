@@ -33,32 +33,9 @@ func (s *sliceImpl) linkSet(names []string, value any) error {
 	if len(names) == 0 {
 		return s.Set(value)
 	}
-	name := names[0]
-
-	var atoi = -1
-	if len(s.sliceToMap) == 0 {
-		var err error
-		if name == "*" {
-			atoi = s.value.Len()
-		} else {
-			atoi, err = strconv.Atoi(name)
-			if err != nil {
-				return err
-			}
-		}
-	} else {
-		var flag bool
-		for i := 0; i < s.value.Len(); i++ {
-			sub := s.value.Index(i).FieldByName(s.sliceToMap)
-			if sub.String() == name {
-				atoi = i
-				flag = true
-				break
-			}
-		}
-		if flag {
-			atoi = s.value.Len()
-		}
+	atoi, err := s.computeIndex(names[0])
+	if err != nil {
+		return err
 	}
 	if len(names) == 1 {
 		if value == nil {
@@ -86,7 +63,6 @@ func (s *sliceImpl) linkSet(names []string, value any) error {
 	}
 
 	var writer Writer
-	var err error
 	writer, err = subWriter(s.value.Index(atoi))
 	if err != nil {
 		return err
@@ -100,47 +76,20 @@ func (s *sliceImpl) linkGet(names []string) (any, bool) {
 	if len(names) == 0 {
 		return s.Get()
 	}
-	name := names[0]
-	var writer Writer
-	if len(s.sliceToMap) == 0 {
-		atoi, err := strconv.Atoi(name)
-		if err != nil || atoi >= s.value.Len() {
-			return nil, false // todo 优化报错
-		}
-		var found bool
-		writer, found = s.mapWriters[atoi]
+	atoi, err := s.computeIndex(names[0])
+	if err != nil {
+		return nil, false
+	}
+	if atoi >= 0 && atoi < s.value.Len() {
+		writer, found := s.mapWriters[atoi]
 		if !found {
 			writer, err = subWriter(s.value.Index(atoi))
-			if err != nil {
-				return nil, false
-			}
-			s.mapWriters[atoi] = writer
 		}
-	} else {
-		atoi := name
-		var err error
-		var found bool
-		writer, found = s.mapWriters[atoi]
-		if !found {
-			var flag bool
-			for i := 0; i < s.value.Len(); i++ {
-				sub := s.value.Index(i).FieldByName(s.sliceToMap)
-				if sub.String() == atoi {
-					flag = true
-					writer, err = subWriter(s.value.Index(i))
-					if err != nil {
-						return nil, false
-					}
-					s.mapWriters[atoi] = writer
-					break
-				}
-			}
-			if !flag {
-				return nil, false
-			}
-		}
+		s.mapWriters[atoi] = writer
+		return writer.linkGet(names[1:])
 	}
-	return writer.linkGet(names[1:])
+	return nil, false
+
 }
 func (s *sliceImpl) GetInstance() any {
 	return s.value.Interface()
@@ -151,4 +100,32 @@ func (s *sliceImpl) LinkSet(linkName string, value any) error {
 }
 func (s *sliceImpl) LinkGet(linkName string) (any, bool) {
 	return s.linkGet(strings.Split(linkName, SqliteSeq))
+}
+func (s *sliceImpl) computeIndex(atoiStr string) (int, error) {
+	var atoi = -1
+	if len(s.sliceToMap) == 0 {
+		var err error
+		if atoiStr == "*" {
+			atoi = s.value.Len()
+		} else {
+			atoi, err = strconv.Atoi(atoiStr)
+			if err != nil {
+				return 0, err
+			}
+		}
+	} else {
+		var flag bool
+		for i := 0; i < s.value.Len(); i++ {
+			sub := s.value.Index(i).FieldByName(s.sliceToMap)
+			if sub.String() == atoiStr {
+				atoi = i
+				flag = true
+				break
+			}
+		}
+		if !flag {
+			atoi = s.value.Len()
+		}
+	}
+	return atoi, nil
 }
