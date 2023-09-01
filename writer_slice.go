@@ -35,102 +35,63 @@ func (s *sliceImpl) linkSet(names []string, value any) error {
 	}
 	name := names[0]
 
-	if len(names) == 1 {
-		// 如果是删除
-		if value == nil {
-			if len(s.sliceToMap) == 0 {
-				atoi, err := strconv.Atoi(name)
-				if err != nil {
-					return err // todo 优化报错
-				}
-				if atoi < s.value.Len() {
-					var x []reflect.Value
-					for i := 0; i < s.value.Len(); i++ {
-						if i <= atoi {
-							continue
-						}
-						x = append(x, s.value.Index(i))
-					}
-
-					s.value.Set(reflect.Append(s.value.Slice(0, atoi), x...))
-					delete(s.mapWriters, atoi)
-				}
-			} else {
-				atoi := name
-				for i := 0; i < s.value.Len(); i++ {
-					sub := s.value.Index(i).FieldByName(s.sliceToMap)
-					if sub.String() == atoi {
-						s.value.Set(reflect.Append(s.value.Slice(0, i), s.value.Slice(i+1, s.value.Len())))
-						delete(s.mapWriters, atoi)
-						break
-					}
-				}
-			}
-		} else {
-			s.value.Set(reflect.Append(s.value, reflect.ValueOf(value)))
-		}
-		return nil
-	}
-	var writer Writer
+	var atoi = -1
 	if len(s.sliceToMap) == 0 {
-		var atoi int
 		var err error
 		if name == "*" {
-			s.value.Set(reflect.Append(s.value, reflect.Zero(s.value.Type().Elem())))
-			atoi = s.value.Len() - 1
+			atoi = s.value.Len()
 		} else {
-			atoi, err := strconv.Atoi(name)
-			if err != nil {
-				return err // todo 优化报错
-			}
-			if atoi >= s.value.Len() {
-				need := atoi - s.value.Len() + 1
-				var adds = make([]reflect.Value, need)
-				for i := 0; i < need; i++ {
-					adds[i] = reflect.Zero(s.value.Type().Elem())
-				}
-				s.value.Set(reflect.Append(s.value, adds...))
-			}
-		}
-		var found bool
-		writer, found = s.mapWriters[atoi]
-		if !found {
-			writer, err = subWriter(s.value.Index(atoi))
+			atoi, err = strconv.Atoi(name)
 			if err != nil {
 				return err
 			}
-			s.mapWriters[atoi] = writer
-			found = true
 		}
 	} else {
-		atoi := name
-		var err error
-		var found bool
-		writer, found = s.mapWriters[atoi]
-		if !found {
-			var flag bool
-			for i := 0; i < s.value.Len(); i++ {
-				sub := s.value.Index(i).FieldByName(s.sliceToMap)
-				if sub.String() == atoi {
-					flag = true
-					writer, err = subWriter(s.value.Index(i))
-					if err != nil {
-						return err
-					}
-					s.mapWriters[atoi] = writer
-					break
-				}
-			}
-			if !flag {
-				sub := reflect.Zero(s.value.Type().Elem())
-				s.value.Set(reflect.Append(s.value, sub))
-				writer, err = subWriter(sub)
-				if err != nil {
-					return err
-				}
+		var flag bool
+		for i := 0; i < s.value.Len(); i++ {
+			sub := s.value.Index(i).FieldByName(s.sliceToMap)
+			if sub.String() == name {
+				atoi = i
+				flag = true
+				break
 			}
 		}
+		if flag {
+			atoi = s.value.Len()
+		}
 	}
+	if len(names) == 1 {
+		if value == nil {
+			if atoi >= 0 && atoi < s.value.Len() {
+				s.value.Set(reflect.AppendSlice(s.value.Slice(0, atoi), s.value.Slice(atoi+1, s.value.Len())))
+			}
+			return nil
+		}
+		if atoi > s.value.Len() {
+			x := reflect.MakeSlice(s.value.Type(), atoi-s.value.Len(), atoi-s.value.Len())
+			s.value.Set(reflect.AppendSlice(s.value, x))
+			s.value.Set(reflect.Append(s.value, reflect.ValueOf(value)))
+		} else if atoi == s.value.Len() {
+			s.value.Set(reflect.Append(s.value, reflect.ValueOf(value)))
+		} else {
+			s.value.Index(atoi).Set(reflect.ValueOf(value))
+		}
+		return nil
+	}
+	if atoi > s.value.Len() {
+		x := reflect.MakeSlice(s.value.Type(), atoi-s.value.Len()+1, atoi-s.value.Len()+1)
+		s.value.Set(reflect.AppendSlice(s.value, x))
+	} else if atoi == s.value.Len() {
+		s.value.Set(reflect.AppendSlice(s.value, reflect.Zero(s.value.Type())))
+	}
+
+	var writer Writer
+	var err error
+	writer, err = subWriter(s.value.Index(atoi))
+	if err != nil {
+		return err
+	}
+	s.mapWriters[atoi] = writer
 	return writer.linkSet(names[1:], value)
 }
 

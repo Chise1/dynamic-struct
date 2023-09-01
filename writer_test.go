@@ -355,13 +355,13 @@ func TestSlice(t *testing.T) {
 	assert.Equal(t, "&{Sub:{Index:10 Slice:[{Integer:1 Text:text1}]}}", fmt.Sprintf("%+v", instance2))
 	writer2, err := NewWriter(instance2)
 	assert.Equal(t, nil, err)
-	err = writer2.LinkSet("Sub.Slice.1", struct {
+	err = writer2.LinkSet("Sub.Slice.2", struct {
 		Integer int    `json:"int"`
 		Text    string `json:"someText"`
 	}{2, "text2"})
 	assert.Equal(t, nil, err)
-	assert.Equal(t, "&{Sub:{Index:10 Slice:[{Integer:1 Text:text1} {Integer:2 Text:text2}]}}", fmt.Sprintf("%+v", instance2))
-	err = writer2.LinkSet("Sub.Slice.1", nil)
+	assert.Equal(t, "&{Sub:{Index:10 Slice:[{Integer:1 Text:text1} {Integer:0 Text:} {Integer:2 Text:text2}]}}", fmt.Sprintf("%+v", instance2))
+	err = writer2.LinkSet("Sub.Slice.2", nil)
 	assert.Equal(t, nil, err)
-	assert.Equal(t, "&{Sub:{Index:10 Slice:[{Integer:1 Text:text1}]}}", fmt.Sprintf("%+v", instance2))
+	assert.Equal(t, "&{Sub:{Index:10 Slice:[{Integer:1 Text:text1} {Integer:0 Text:}]}}", fmt.Sprintf("%+v", instance2))
 }
