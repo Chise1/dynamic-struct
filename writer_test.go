@@ -54,21 +54,19 @@ func TestSubSliceStruct(t *testing.T) {
 	if fmt.Sprintf("%v", instance) != "&{123 example 123.45 true [1 2 3]  {0 } [{1}]}" {
 		t.Fatal("not equal")
 	}
-
 	writer, err := NewWriter(instance)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = writer.Append("SubStruct", subStruct2{Index: "2"})
+	err = writer.LinkSet("SubStruct.1", subStruct2{Index: "2"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	assert.Equal(t, "&{123 example 123.45 true [1 2 3]  {0 } [{1} {2}]}", fmt.Sprintf("%v", instance))
-	err = writer.Remove("SubStruct", 0, 1)
+	err = writer.LinkSet("SubStruct.0", nil)
 	assert.Equal(t, nil, err)
 	fmt.Printf("%v", instance)
 	assert.Equal(t, "&{123 example 123.45 true [1 2 3]  {0 } [{2}]}", fmt.Sprintf("%v", instance))
-
 }
 func TestNewWriter(t *testing.T) {
 	data := []byte(`
@@ -109,9 +107,9 @@ func TestNewWriter(t *testing.T) {
 		fmt.Println(string(data))
 		t.Fatal("not equal")
 	}
-	err = writer.SetStruct("Struct", struct {
-		Integer int
-		Text    string
+	err = writer.LinkSet("Struct", struct {
+		Integer int    `json:"int"`
+		Text    string `json:"someText"`
 	}{101, "lb"})
 	assert.Equal(t, nil, err)
 
@@ -121,7 +119,7 @@ func TestNewWriter(t *testing.T) {
 	if string(marshal) != `{"int":123,"someText":"example","double":123.45,"Boolean":true,"Slice":[1,2,3],"struct":{"int":101,"someText":"lb"}}` {
 		t.Fatal("not equal")
 	}
-	st, found := writer.Get("Struct")
+	st, found := writer.LinkGet("Struct")
 	if !found {
 		t.Fatal("not found Struct")
 	}
@@ -155,29 +153,29 @@ func TestNewWriteSubStruct(t *testing.T) {
 	writer, err := NewWriter(instance)
 	assert.Equal(t, nil, err)
 
-	err = writer.Set("SubStruct", subStruct{
+	err = writer.LinkSet("SubStruct", subStruct{
 		Boolean: false,
 	})
 	assert.Equal(t, nil, err)
 
-	err = writer.Set("SubStruct", subStruct2{
+	err = writer.LinkSet("SubStruct", subStruct2{
 		Index: "10",
 	})
 	assert.NotEqual(t, nil, err)
 
-	dd, _ := writer.Get("SubStruct")
+	dd, _ := writer.LinkGet("SubStruct")
 	marshal, _ := json.Marshal(instance)
 	fmt.Println(string(marshal))
 	if fmt.Sprintf("%v", dd) != "{false}" {
 		t.Fatal("not equal")
 	}
-	err = writer.Set("SubStruct", subStruct{
+	err = writer.LinkSet("SubStruct", subStruct{
 		Boolean: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	dd, _ = writer.Get("SubStruct")
+	dd, _ = writer.LinkGet("SubStruct")
 	if fmt.Sprintf("%v", dd) != "{true}" {
 		t.Fatal("not equal")
 	}
@@ -217,14 +215,17 @@ func TestSubSlice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = writer.Set("Slice", []int{4, 5, 6})
+	err = writer.LinkSet("Slice", []int{4, 5, 6})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if fmt.Sprintf("%v", instance) != "&{123 example 123.45 true [4 5 6]  {true}}" {
 		t.Fatal("not equal")
 	}
-	err = writer.LinkAppend("Slice", 7, 8, 9)
+	err = writer.LinkSet("Slice.*", 7)
+	err = writer.LinkSet("Slice.*", 8)
+	err = writer.LinkSet("Slice.*", 9)
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,10 +233,12 @@ func TestSubSlice(t *testing.T) {
 		fmt.Printf("%v", instance)
 		t.Fatal("not equal")
 	}
-	err = writer.LinkRemove("Slice", 0, 3)
-	if err != nil {
-		t.Fatal(err)
-	}
+	err = writer.LinkSet("Slice.0", nil)
+	assert.Equal(t, nil, err)
+	err = writer.LinkSet("Slice.0", nil)
+	assert.Equal(t, nil, err)
+	err = writer.LinkSet("Slice.0", nil)
+	assert.Equal(t, nil, err)
 	if fmt.Sprintf("%v", instance) != "&{123 example 123.45 true [7 8 9]  {true}}" {
 		fmt.Printf("%v", instance)
 		t.Fatal("not equal")
@@ -246,7 +249,7 @@ func TestSubSliceFinal(t *testing.T) {
 	sub1 := subSt1.New()
 	wt, err := NewWriter(sub1)
 	assert.Equal(t, nil, err)
-	err = wt.Set("Index", 11)
+	err = wt.LinkSet("Index", 11)
 	assert.Equal(t, nil, err)
 
 	subList := subSt1.ZeroSliceOfStructs()
@@ -262,8 +265,8 @@ func TestSubSliceFinal(t *testing.T) {
 	if err != nil {
 		t.Log(err)
 	}
-	writer.Set("SubStruct", sub1)
-	writer.Set("Index", "111")
+	writer.LinkSet("SubStruct", sub1)
+	writer.LinkSet("Index", "111")
 	fmt.Println(sub2)
 	subl2 := subSt2.ZeroSliceOfStructs()
 	fmt.Println(subl2)
@@ -312,7 +315,8 @@ func TestMap(t *testing.T) {
 	writer, err := NewWriter(instance)
 	assert.Equal(t, nil, err)
 	err = writer.LinkSet("Map.text1.Integer", 2)
-	assert.Equal(t, nil, err)
+	bytess, err := json.Marshal(instance)
+	fmt.Printf(string(bytess))
 	err = writer.LinkSet("Map.text1.Integer", "2")
 	assert.NotEqual(t, nil, err)
 	bytes, err := json.Marshal(instance)
@@ -329,7 +333,7 @@ func TestMap(t *testing.T) {
 	bytes, err = json.Marshal(instance)
 	assert.Equal(t, nil, err)
 	assert.Equal(t, `{"index":10,"Map":{"text1":{"int":2,"someText":"text1"},"text2":{"int":22,"someText":"text2"}}}`, string(bytes))
-	err = writer.Delete("Map", "text1")
+	err = writer.LinkSet("Map.text1", nil)
 	assert.Equal(t, nil, err)
 	bytes, err = json.Marshal(instance)
 	assert.Equal(t, `{"index":10,"Map":{"text2":{"int":22,"someText":"text2"}}}`, string(bytes))
@@ -351,13 +355,13 @@ func TestSlice(t *testing.T) {
 	assert.Equal(t, "&{Sub:{Index:10 Slice:[{Integer:1 Text:text1}]}}", fmt.Sprintf("%+v", instance2))
 	writer2, err := NewWriter(instance2)
 	assert.Equal(t, nil, err)
-	err = writer2.LinkAppend("Sub.Slice", struct {
+	err = writer2.LinkSet("Sub.Slice.1", struct {
 		Integer int    `json:"int"`
 		Text    string `json:"someText"`
 	}{2, "text2"})
 	assert.Equal(t, nil, err)
 	assert.Equal(t, "&{Sub:{Index:10 Slice:[{Integer:1 Text:text1} {Integer:2 Text:text2}]}}", fmt.Sprintf("%+v", instance2))
-	err = writer2.LinkRemove("Sub.Slice", 1, 2)
+	err = writer2.LinkSet("Sub.Slice.1", nil)
 	assert.Equal(t, nil, err)
 	assert.Equal(t, "&{Sub:{Index:10 Slice:[{Integer:1 Text:text1}]}}", fmt.Sprintf("%+v", instance2))
 }
