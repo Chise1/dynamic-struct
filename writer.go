@@ -128,3 +128,16 @@ func NewWriter(value any) (writer Writer, err error) {
 	ret, err := subWriter(value)
 	return ret, err
 }
+
+func UpdateFromJson(writer Writer, linkName string, jsonData []byte, unmarshalFunc func([]byte, any) error) error {
+	typ, ok := writer.LinkTyp(linkName)
+	if !ok {
+		return errors.New("can not got type by " + linkName)
+	}
+	instance := reflect.New(typ).Interface()
+	err := unmarshalFunc(jsonData, &instance)
+	if err != nil {
+		return err
+	}
+	return writer.LinkSet(linkName, reflect.Indirect(reflect.ValueOf(instance)))
+}
