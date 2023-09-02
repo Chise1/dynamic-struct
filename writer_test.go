@@ -493,4 +493,21 @@ func TestMapImpl(t *testing.T) {
 	val, found = writer.LinkGet("M2")
 	assert.Equal(t, true, found)
 	assert.Equal(t, "map[1:{1 lisi}]", fmt.Sprint(val))
+	data := `{"Index":33,"Name":"ff33"}`
+	typ, ok := writer.LinkTyp("M2.1")
+	assert.Equal(t, true, ok)
+	instance := NewObj(typ)
+	assert.Equal(t, true, found)
+	err = json.Unmarshal([]byte(data), &instance)
+	assert.Equal(t, nil, err)
+
+	assert.Equal(t, true, found)
+	assert.Equal(t, "&{33 ff33}", fmt.Sprint(instance))
+	err = writer.LinkSet("M2.33", reflect.Indirect(reflect.ValueOf(instance)))
+	assert.Equal(t, nil, err)
+	assert.Equal(t, "{0 map[1:{1 lisi} 33:{33 ff33}] map[zhangsan:ei]}", fmt.Sprint(s))
+
+}
+func NewObj(t reflect.Type) any {
+	return reflect.New(t).Interface()
 }

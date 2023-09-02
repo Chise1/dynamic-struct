@@ -42,3 +42,12 @@ func (s *scalarImpl) LinkSet(_ string, _ any) error {
 func (s *scalarImpl) LinkGet(_ string) (any, bool) {
 	return nil, false
 }
+func (s *scalarImpl) Type() reflect.Type {
+	return s.field.Type
+}
+func (s *scalarImpl) linkTyp(names []string) (reflect.Type, bool) {
+	return s.Type(), true
+}
+func (s *scalarImpl) LinkTyp(name string) (reflect.Type, bool) {
+	return s.Type(), true
+}

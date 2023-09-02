@@ -9,7 +9,7 @@ import (
 type structImpl struct {
 	fields map[string]Writer
 	value  reflect.Value
-	writer Writer
+	field  reflect.Type
 }
 
 func (s *structImpl) Set(value any) (err error) {
@@ -58,4 +58,22 @@ func (s *structImpl) linkGet(names []string) (any, bool) {
 		return nil, false
 	}
 	return field.linkGet(names[1:])
+}
+
+func (s *structImpl) Type() reflect.Type {
+	return s.field
+}
+func (s *structImpl) linkTyp(names []string) (reflect.Type, bool) {
+	if len(names) == 0 {
+		return s.Type(), true
+	}
+	name := names[0]
+	field, ok := s.fields[name]
+	if !ok {
+		return nil, false
+	}
+	return field.linkTyp(names[1:])
+}
+func (s *structImpl) LinkTyp(name string) (reflect.Type, bool) {
+	return s.linkTyp(strings.Split(name, SqliteSeq))
 }

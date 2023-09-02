@@ -9,6 +9,7 @@ import (
 type mapImpl struct {
 	mapWriters map[any]Writer
 	value      reflect.Value
+	field      reflect.StructField
 }
 
 func (s *mapImpl) Set(value any) (err error) {
@@ -36,7 +37,12 @@ func (s *mapImpl) linkSet(names []string, value any) error {
 		if value == nil { //delete
 			reflect.Indirect(s.value).SetMapIndex(reflect.ValueOf(key), reflect.Value{})
 		} else {
-			reflect.Indirect(s.value).SetMapIndex(reflect.ValueOf(key), reflect.ValueOf(value))
+			switch res := value.(type) {
+			case reflect.Value:
+				reflect.Indirect(s.value).SetMapIndex(reflect.ValueOf(key), res)
+			default:
+				reflect.Indirect(s.value).SetMapIndex(reflect.ValueOf(key), reflect.ValueOf(value))
+			}
 		}
 		return nil
 	}
@@ -108,4 +114,22 @@ func (s *mapImpl) linkGet(names []string) (any, bool) {
 		s.mapWriters[key] = writer
 	}
 	return writer.linkGet(names[1:])
+}
+func (s *mapImpl) Type() reflect.Type {
+	return s.field.Type
+}
+func (s *mapImpl) linkTyp(names []string) (reflect.Type, bool) {
+	if len(names) == 0 {
+		return s.Type(), true
+	}
+	var x reflect.Value
+	x = reflect.New(s.value.Type().Elem())
+	writer, err := subWriter(x)
+	if err != nil {
+		return nil, false // todo 优化报错
+	}
+	return writer.linkTyp(names[1:])
+}
+func (s *mapImpl) LinkTyp(linkName string) (reflect.Type, bool) {
+	return s.linkTyp(strings.Split(linkName, SqliteSeq))
 }

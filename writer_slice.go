@@ -10,6 +10,7 @@ import (
 
 type sliceImpl struct {
 	value      reflect.Value
+	field      reflect.StructField
 	sliceToMap string //以map形式存储切片
 	mapWriters map[any]Writer
 }
@@ -127,4 +128,23 @@ func (s *sliceImpl) computeIndex(atoiStr string) (int, error) {
 		}
 	}
 	return atoi, nil
+}
+
+func (s *sliceImpl) Type() reflect.Type {
+	return s.field.Type
+}
+func (s *sliceImpl) linkTyp(names []string) (reflect.Type, bool) {
+	if len(names) == 0 {
+		return s.Type(), true
+	}
+	ints := reflect.Zero(s.value.Type().Elem())
+	writer, err := subWriter(ints)
+	if err == nil {
+		return writer.linkTyp(names[1:])
+	}
+	return nil, false
+}
+func (s *sliceImpl) LinkTyp(linkName string) (reflect.Type, bool) {
+	return s.linkTyp(strings.Split(linkName, SqliteSeq))
+
 }
